@@ -5,7 +5,7 @@
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
 define('DB_PASS', '123456');
-define('DB_NAME', 'vehicle_maintenance_db');
+define('DB_NAME', 'pay_bill');
 
 try {
     // Create PDO instance
