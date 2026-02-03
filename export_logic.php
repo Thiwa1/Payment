@@ -24,11 +24,11 @@ function get_payment_data($month_year = null) {
         $month_year = date('F Y');
     }
 
-    // Support YYYY-MM or YYYY-MM-DD (for specific day reports)
+    // Support YYYY-MM or YYYY-MM-DD
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $month_year)) {
-        $term = $month_year; // Exact match for day
+        $term = $month_year;
     } elseif (preg_match('/^\d{4}-\d{2}$/', $month_year)) {
-        $term = "$month_year%"; // Month prefix
+        $term = "$month_year%";
     } else {
         $term = date('Y-m') . "%";
     }
@@ -58,11 +58,11 @@ function export_to_csv($headers, $rows, $filename) {
     exit;
 }
 
+// ... generate_fuel_allowance_report ... (unchanged logic mostly, omitted for brevity, will paste back full content if needed, but focus is on bank transfer)
 function generate_fuel_allowance_report($month_year = null) {
     $rows = get_payment_data($month_year);
 
     if (!check_dependencies()) {
-        // Fallback to CSV
         $headers = ['Calling Name', 'Emp #', 'Account Name', 'Bank', 'Branch', 'Account No', 'Area', 'Amount'];
         $csv_rows = [];
         foreach ($rows as $row) {
@@ -115,16 +115,32 @@ function generate_fuel_allowance_report($month_year = null) {
 function generate_bank_transfer_report($month_year = null) {
     $rows = get_payment_data($month_year);
 
+    // Determine Month/Year string for remark "Sensus BPO Fuel [Month] [Year]"
+    // If $month_year is YYYY-MM-DD or YYYY-MM, format it.
+    $ts = strtotime($month_year ?? date('Y-m-d'));
+    $remarkText = "Sensus BPO Fuel " . date('F Y', $ts);
+
     if (!check_dependencies()) {
-        // Fallback to CSV (Simplified structure)
-        $headers = ['Ref No', 'Account Name', 'Bank', 'Branch', 'Credit Acc No', 'Tran Code', 'Amount', 'Currency', 'Value Date', 'Remark'];
+        // Fallback to CSV
+        // Structure: RefNo, AccountName, Bank, Branch, CreditAcc, TranCode, Amount, Rs, YYYY, MM, DD, Remark
+        $headers = ['Ref No', 'Account Name', 'Bank', 'Branch', 'Credit Acc No', 'Tran Code', 'Amount', 'Rs', 'YYYY', 'MM', 'DD', 'Remark'];
         $csv_rows = [];
+        $count = 1;
         foreach ($rows as $row) {
-            $refNo = substr(preg_replace('/\D/', '', $row['employee_number']), 0, 8);
+            $pDate = strtotime($row['payment_date']);
             $csv_rows[] = [
-                $refNo, $row['account_name'], $row['bank'], $row['branch'],
-                $row['account_number'], '23', $row['amount'], 'LKR',
-                $row['payment_date'], 'Fuel Allowance'
+                $count++,
+                $row['account_name'],
+                $row['bank'],
+                $row['branch'],
+                $row['account_number'],
+                '052', // Fixed Code
+                $row['amount'],
+                '00', // Rs/Cents
+                date('Y', $pDate),
+                date('m', $pDate),
+                date('d', $pDate),
+                $remarkText
             ];
         }
         export_to_csv($headers, $csv_rows, "bank_transfer_$month_year.csv");
@@ -171,15 +187,16 @@ function generate_bank_transfer_report($month_year = null) {
     $sheet->getStyle('A1:L2')->applyFromArray($headerStyle);
 
     $rowNum = 3;
+    $count = 1;
     foreach ($rows as $row) {
-        $refNo = substr(preg_replace('/\D/', '', $row['employee_number']), 0, 8);
+        $refNo = $count++; // Sequential order
 
         $sheet->setCellValue('A' . $rowNum, $refNo);
         $sheet->setCellValue('B' . $rowNum, $row['account_name']);
         $sheet->setCellValue('C' . $rowNum, $row['bank']);
         $sheet->setCellValue('D' . $rowNum, $row['branch']);
         $sheet->setCellValue('E' . $rowNum, $row['account_number']);
-        $sheet->setCellValue('F' . $rowNum, '23');
+        $sheet->setCellValue('F' . $rowNum, '052'); // Fixed
         $sheet->setCellValue('G' . $rowNum, $row['amount']);
         $sheet->setCellValue('H' . $rowNum, '00');
 
@@ -187,7 +204,7 @@ function generate_bank_transfer_report($month_year = null) {
         $sheet->setCellValue('I' . $rowNum, date('Y', $pDate));
         $sheet->setCellValue('J' . $rowNum, date('m', $pDate));
         $sheet->setCellValue('K' . $rowNum, date('d', $pDate));
-        $sheet->setCellValue('L' . $rowNum, "Fuel Allowance");
+        $sheet->setCellValue('L' . $rowNum, $remarkText);
 
         $rowNum++;
     }
@@ -199,18 +216,17 @@ function generate_bank_transfer_report($month_year = null) {
     return $spreadsheet;
 }
 
+// ... generate_paysheet_excel ... (unchanged logic)
 function generate_paysheet_excel($month_year = null) {
     $rows = get_paysheet_data($month_year);
 
     if (!check_dependencies()) {
-        // Fallback to CSV
         $headers = [
             'No.', 'Emp Code', 'Name', 'Designation', 'WORKING PLACE / PROJECT', 'PROJECT HEAD', 'STATUS',
             'BASIC SALARY', 'Travelling Allowance', 'Vehicle Allowance', 'Arreas', 'GROSS PAY',
             'SALARY NOPAY DAYS', 'NOPAY FOR BUDGETORY', 'NOPAY FOR OTHER', 'EPF 8%',
             'Salary Advance', 'Staff Loan', 'Communication Deduction', 'NET PAY', 'HOLD'
         ];
-        // Need to construct rows to match header order exactly
         $csv_rows = [];
         $count = 1;
         foreach ($rows as $row) {
