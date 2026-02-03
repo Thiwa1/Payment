@@ -5,8 +5,6 @@ require_once 'db_adapter.php';
 
 function add_employee($data) {
     $pdo = getDBConnection();
-    // Using MySQL specific syntax for INSERT IGNORE or ON DUPLICATE if needed?
-    // Standard INSERT is fine, assuming checks are handled or unique constraints throw error.
 
     $sql = "INSERT INTO employees (calling_name, account_name, employee_number, bank, branch, nic_no, account_number, area)
             VALUES (:calling_name, :account_name, :employee_number, :bank, :branch, :nic_no, :account_number, :area)";
@@ -24,14 +22,12 @@ function add_employee($data) {
         ]);
         return true;
     } catch (PDOException $e) {
-        // In a real app, handle duplicate errors gracefully
         return false;
     }
 }
 
 function get_employees() {
     $pdo = getDBConnection();
-    // Check if table exists first? The setup script should have run.
     try {
         $stmt = $pdo->query("SELECT * FROM employees ORDER BY id DESC");
         return $stmt->fetchAll();
@@ -57,19 +53,37 @@ function get_employee_by_id($id) {
 
 function bulk_upload_employees($file_path) {
     if (!file_exists($file_path)) {
-        return false;
+        return ['count' => 0, 'errors' => ["File not found"]];
     }
 
     $handle = fopen($file_path, "r");
     if ($handle === FALSE) {
-        return false;
+        return ['count' => 0, 'errors' => ["Cannot open file"]];
     }
+
+    // Skip Header?
+    // We should be smarter. If the user provides a CSV, usually the first row IS header.
+    // But if it fails to find any valid rows, maybe the first row WAS data?
+    // Let's stick to standard practice: First row is Header.
+    // However, I will capture specific errors for rows.
 
     $header = fgetcsv($handle);
 
     $count = 0;
+    $errors = [];
+    $rowNum = 2; // Starting after header
+
     while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-        if (count($data) < 8) continue;
+        // If empty row
+        if (empty($data) || (count($data) == 1 && empty($data[0]))) {
+            continue;
+        }
+
+        if (count($data) < 8) {
+            $errors[] = "Row $rowNum: Not enough columns (found " . count($data) . ", expected 8).";
+            $rowNum++;
+            continue;
+        }
 
         $emp_data = [
             'calling_name' => $data[0],
@@ -84,10 +98,13 @@ function bulk_upload_employees($file_path) {
 
         if (add_employee($emp_data)) {
             $count++;
+        } else {
+            $errors[] = "Row $rowNum: Failed to add (Duplicate Emp No/NIC/Acc No or invalid data).";
         }
+        $rowNum++;
     }
     fclose($handle);
-    return $count;
+    return ['count' => $count, 'errors' => $errors];
 }
 
 function save_payment($employee_id, $amount, $payment_date) {
@@ -113,23 +130,10 @@ function bulk_upload_paysheet($file_path, $date) {
         return false;
     }
 
-    // Expected Header Order based on prompt:
-    // No., Emp Code, Name, Designation, WORKING PLACE / PROJECT, PROJECT HEAD, STATUS, BASIC SALARY,
-    // Travelling Allowance, Vehicle Allowance, Arreas, GROSS PAY, SALARY NOPAY DAYS, NOPAY FOR BUDGETORY,
-    // NOPAY FOR OTHER, EPF 8%, Salary Advance, Staff Loan, Communication Deduction, NET PAY, HOLD,
-    // (New fields potentially: BRA, Festival Advance, Fuel Deduction)
-
-    // We skip the first row (header)
+    // Header logic similar to employees
     $header = fgetcsv($handle);
 
     $pdo = getDBConnection();
-
-    // Check if new columns exist? Assuming setup_database.php adds them or they exist.
-    // I will add them to the query if I update the table.
-    // For now, let's stick to the previous schema + new fields if I decide to add them.
-    // The previous prompt iteration established the schema.
-    // I'll update this function when I update the DB schema in the next step.
-    // For now, restoring the previous logic for paysheet upload.
 
     $sql = "INSERT INTO paysheets (
         date, emp_code, name, designation, working_place, project_head, status,

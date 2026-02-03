@@ -27,11 +27,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_employee'])) {
 // Handle CSV Upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_csv'])) {
     if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] == 0) {
-        $count = bulk_upload_employees($_FILES['csv_file']['tmp_name']);
-        if ($count !== false) {
+        $result = bulk_upload_employees($_FILES['csv_file']['tmp_name']);
+        if (is_array($result)) {
+            $count = $result['count'];
+            $uploadErrors = $result['errors'];
             $message = "Uploaded $count employees successfully.";
+            if ($count === 0 && empty($uploadErrors)) {
+                 $message = "Uploaded 0 employees. (Did you include a header row? First row is skipped.)";
+            }
+            if (!empty($uploadErrors)) {
+                $error = "Some errors occurred during upload:<br>" . implode("<br>", $uploadErrors);
+            }
         } else {
-            $error = "Failed to process CSV file.";
+            // Fallback if logic changes back to boolean/int for some reason
+            $message = "Uploaded successfully.";
         }
     } else {
         $error = "Please upload a valid CSV file.";
