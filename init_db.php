@@ -2,9 +2,6 @@
 function ensure_tables_exist($pdo) {
     $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
-    // Define column types based on driver if needed, but standard SQL types often work.
-    // Main difference is Auto Increment syntax.
-
     $auto_inc = ($driver === 'mysql') ? "INT AUTO_INCREMENT PRIMARY KEY" : "INTEGER PRIMARY KEY AUTOINCREMENT";
 
     // 1. Employees Table
@@ -23,8 +20,6 @@ function ensure_tables_exist($pdo) {
         CONSTRAINT unique_acc_no UNIQUE (account_number)
     )";
 
-    // MySQL requires explicit VARCHAR lengths for UNIQUE constraints in some setups, but TEXT might work depending on version.
-    // Safer to use VARCHAR for MySQL keys.
     if ($driver === 'mysql') {
         $sql_employees = "CREATE TABLE IF NOT EXISTS employees (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -62,9 +57,33 @@ function ensure_tables_exist($pdo) {
     }
     $pdo->exec($sql_payments);
 
-    // 3. Paysheets Table
+    // 4. Schedules Table (NEW)
+    $sql_schedules = "CREATE TABLE IF NOT EXISTS schedules (
+        id $auto_inc,
+        name TEXT NOT NULL UNIQUE,
+        date TEXT NOT NULL,
+        created_at TEXT
+    )";
+    if ($driver === 'mysql') {
+        $sql_schedules = "CREATE TABLE IF NOT EXISTS schedules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL UNIQUE,
+            date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )";
+    }
+    $pdo->exec($sql_schedules);
+
+    // 3. Paysheets Table (Updated with schedule_id)
+    // Note: If table exists, we might need to alter it.
+    // Since I can't easily alter in a portable way without checking existence of column,
+    // I will try to add the column or create new.
+    // For simplicity in this environment:
+    // If table exists, I'll try to add column.
+
     $sql_paysheets = "CREATE TABLE IF NOT EXISTS paysheets (
         id $auto_inc,
+        schedule_id INTEGER,
         date TEXT NOT NULL,
         emp_code TEXT,
         name TEXT,
@@ -85,11 +104,14 @@ function ensure_tables_exist($pdo) {
         staff_loan REAL,
         communication_deduction REAL,
         net_pay REAL,
-        hold TEXT
+        hold TEXT,
+        FOREIGN KEY (schedule_id) REFERENCES schedules(id)
     )";
+
     if ($driver === 'mysql') {
          $sql_paysheets = "CREATE TABLE IF NOT EXISTS paysheets (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            schedule_id INT,
             date DATE NOT NULL,
             emp_code VARCHAR(50),
             name VARCHAR(100),
@@ -110,9 +132,24 @@ function ensure_tables_exist($pdo) {
             staff_loan DECIMAL(10,2),
             communication_deduction DECIMAL(10,2),
             net_pay DECIMAL(10,2),
-            hold VARCHAR(50)
+            hold VARCHAR(50),
+            FOREIGN KEY (schedule_id) REFERENCES schedules(id)
         )";
     }
     $pdo->exec($sql_paysheets);
+
+    // Attempt to add column if missing (Migration logic)
+    // Simple check: Select one row, check if column exists?
+    // Or just try ALTER TABLE and ignore error.
+    try {
+        if ($driver === 'mysql') {
+            $pdo->exec("ALTER TABLE paysheets ADD COLUMN schedule_id INT AFTER id");
+            $pdo->exec("ALTER TABLE paysheets ADD FOREIGN KEY (schedule_id) REFERENCES schedules(id)");
+        } else {
+            $pdo->exec("ALTER TABLE paysheets ADD COLUMN schedule_id INTEGER REFERENCES schedules(id)");
+        }
+    } catch (PDOException $e) {
+        // Ignore "duplicate column" error
+    }
 }
 ?>

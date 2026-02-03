@@ -1,18 +1,15 @@
 <?php
 require_once 'db_adapter.php';
 
-// --- Employee Management Functions ---
+// ... (Previous Employee & Payment Functions retained) ...
 
 function add_employee($data) {
     $pdo = getDBConnection();
-
-    // Check if employee exists by Employee Number (Primary unique identifier for business logic)
     $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :en");
     $stmt->execute([':en' => $data['employee_number']]);
     $existing = $stmt->fetch();
 
     if ($existing) {
-        // Update existing record
         $sql = "UPDATE employees SET
                 calling_name = :calling_name,
                 account_name = :account_name,
@@ -35,12 +32,8 @@ function add_employee($data) {
                 ':id' => $existing['id']
             ]);
             return true;
-        } catch (PDOException $e) {
-            // Update might fail if NIC or Account Number conflicts with *another* employee (not the one we are updating)
-            return false;
-        }
+        } catch (PDOException $e) { return false; }
     } else {
-        // Insert new record
         $sql = "INSERT INTO employees (calling_name, account_name, employee_number, bank, branch, nic_no, account_number, area)
                 VALUES (:calling_name, :account_name, :employee_number, :bank, :branch, :nic_no, :account_number, :area)";
         $stmt = $pdo->prepare($sql);
@@ -56,9 +49,7 @@ function add_employee($data) {
                 ':area' => $data['area']
             ]);
             return true;
-        } catch (PDOException $e) {
-            return false;
-        }
+        } catch (PDOException $e) { return false; }
     }
 }
 
@@ -67,9 +58,7 @@ function get_employees() {
     try {
         $stmt = $pdo->query("SELECT * FROM employees ORDER BY id DESC");
         return $stmt->fetchAll();
-    } catch (PDOException $e) {
-        return [];
-    }
+    } catch (PDOException $e) { return []; }
 }
 
 function get_employee_by_search($term) {
@@ -88,32 +77,21 @@ function get_employee_by_id($id) {
 }
 
 function bulk_upload_employees($file_path) {
-    if (!file_exists($file_path)) {
-        return ['count' => 0, 'errors' => ["File not found"]];
-    }
-
+    if (!file_exists($file_path)) return ['count' => 0, 'errors' => ["File not found"]];
     $handle = fopen($file_path, "r");
-    if ($handle === FALSE) {
-        return ['count' => 0, 'errors' => ["Cannot open file"]];
-    }
+    if ($handle === FALSE) return ['count' => 0, 'errors' => ["Cannot open file"]];
 
     $header = fgetcsv($handle);
-
     $count = 0;
     $errors = [];
-    $rowNum = 2; // Starting after header
+    $rowNum = 2;
 
     while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-        if (empty($data) || (count($data) == 1 && empty($data[0]))) {
-            continue;
-        }
-
+        if (empty($data) || (count($data) == 1 && empty($data[0]))) continue;
         if (count($data) < 8) {
-            $errors[] = "Row $rowNum: Not enough columns (found " . count($data) . ", expected 8).";
-            $rowNum++;
-            continue;
+            $errors[] = "Row $rowNum: Not enough columns.";
+            $rowNum++; continue;
         }
-
         $emp_data = [
             'calling_name' => $data[0],
             'account_name' => $data[1],
@@ -124,12 +102,8 @@ function bulk_upload_employees($file_path) {
             'account_number' => $data[6],
             'area' => $data[7]
         ];
-
-        if (add_employee($emp_data)) {
-            $count++;
-        } else {
-            $errors[] = "Row $rowNum: Failed to add/update (Check for duplicate NIC/Acc No with other employees).";
-        }
+        if (add_employee($emp_data)) $count++;
+        else $errors[] = "Row $rowNum: Failed to add/update.";
         $rowNum++;
     }
     fclose($handle);
@@ -140,20 +114,12 @@ function save_payment($employee_id, $amount, $payment_date) {
     $pdo = getDBConnection();
     $sql = "INSERT INTO payments (employee_id, amount, payment_date) VALUES (:employee_id, :amount, :payment_date)";
     $stmt = $pdo->prepare($sql);
-    return $stmt->execute([
-        ':employee_id' => $employee_id,
-        ':amount' => $amount,
-        ':payment_date' => $payment_date
-    ]);
+    return $stmt->execute([':employee_id' => $employee_id, ':amount' => $amount, ':payment_date' => $payment_date]);
 }
 
 function get_recent_payments($limit = 20) {
     $pdo = getDBConnection();
-    // Use SQL to join with employees
-    $sql = "SELECT p.id, p.payment_date, p.amount, e.calling_name, e.employee_number
-            FROM payments p
-            JOIN employees e ON p.employee_id = e.id
-            ORDER BY p.id DESC LIMIT :limit";
+    $sql = "SELECT p.id, p.payment_date, p.amount, e.calling_name, e.employee_number FROM payments p JOIN employees e ON p.employee_id = e.id ORDER BY p.id DESC LIMIT :limit";
     $stmt = $pdo->prepare($sql);
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->execute();
@@ -166,29 +132,55 @@ function delete_payment($id) {
     return $stmt->execute([':id' => $id]);
 }
 
-// --- Paysheet Functions ---
+// --- Schedule & Paysheet Functions ---
 
-function bulk_upload_paysheet($file_path, $date) {
-    if (!file_exists($file_path)) {
-        return false;
+function create_schedule($name, $date) {
+    $pdo = getDBConnection();
+    $sql = "INSERT INTO schedules (name, date, created_at) VALUES (:name, :date, :created_at)";
+    $stmt = $pdo->prepare($sql);
+    try {
+        $stmt->execute([
+            ':name' => $name,
+            ':date' => $date,
+            ':created_at' => date('Y-m-d H:i:s')
+        ]);
+        return $pdo->lastInsertId();
+    } catch (PDOException $e) {
+        return false; // Likely duplicate name
     }
+}
 
+function get_schedules() {
+    $pdo = getDBConnection();
+    try {
+        $stmt = $pdo->query("SELECT * FROM schedules ORDER BY date DESC, id DESC");
+        return $stmt->fetchAll();
+    } catch (PDOException $e) { return []; }
+}
+
+function get_schedule_by_id($id) {
+    $pdo = getDBConnection();
+    $stmt = $pdo->prepare("SELECT * FROM schedules WHERE id = :id");
+    $stmt->execute([':id' => $id]);
+    return $stmt->fetch();
+}
+
+function bulk_upload_paysheet($file_path, $schedule_id, $date) {
+    if (!file_exists($file_path)) return false;
     $handle = fopen($file_path, "r");
-    if ($handle === FALSE) {
-        return false;
-    }
+    if ($handle === FALSE) return false;
 
     $header = fgetcsv($handle);
-
     $pdo = getDBConnection();
 
+    // Using schedule_id now
     $sql = "INSERT INTO paysheets (
-        date, emp_code, name, designation, working_place, project_head, status,
+        schedule_id, date, emp_code, name, designation, working_place, project_head, status,
         basic_salary, travelling_allowance, vehicle_allowance, arrears, gross_pay,
         salary_nopay_days, nopay_budgetory, nopay_other, epf_8, salary_advance,
         staff_loan, communication_deduction, net_pay, hold
     ) VALUES (
-        :date, :emp_code, :name, :designation, :working_place, :project_head, :status,
+        :schedule_id, :date, :emp_code, :name, :designation, :working_place, :project_head, :status,
         :basic_salary, :travelling_allowance, :vehicle_allowance, :arrears, :gross_pay,
         :salary_nopay_days, :nopay_budgetory, :nopay_other, :epf_8, :salary_advance,
         :staff_loan, :communication_deduction, :net_pay, :hold
@@ -199,7 +191,8 @@ function bulk_upload_paysheet($file_path, $date) {
     while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
         try {
             $stmt->execute([
-                ':date' => $date,
+                ':schedule_id' => $schedule_id,
+                ':date' => $date, // Kept for redundancy/compatibility, but schedule has date too
                 ':emp_code' => $data[1] ?? '',
                 ':name' => $data[2] ?? '',
                 ':designation' => $data[3] ?? '',
@@ -222,9 +215,7 @@ function bulk_upload_paysheet($file_path, $date) {
                 ':hold' => $data[20] ?? ''
             ]);
             $count++;
-        } catch (PDOException $e) {
-            continue;
-        }
+        } catch (PDOException $e) { continue; }
     }
     fclose($handle);
     return $count;
@@ -237,10 +228,19 @@ function clean_number($val) {
 
 function get_paysheet_data($month_year) {
     $pdo = getDBConnection();
-    $term = "$month_year%";
-    $stmt = $pdo->prepare("SELECT * FROM paysheets WHERE date LIKE :term ORDER BY id ASC");
-    $stmt->execute([':term' => $term]);
-    return $stmt->fetchAll();
+    // Support searching by ID if numeric, else date
+    if (is_numeric($month_year)) {
+        // Assume ID
+        $stmt = $pdo->prepare("SELECT * FROM paysheets WHERE schedule_id = :id ORDER BY id ASC");
+        $stmt->execute([':id' => $month_year]);
+        return $stmt->fetchAll();
+    } else {
+        // Fallback to date prefix match
+        $term = "$month_year%";
+        $stmt = $pdo->prepare("SELECT * FROM paysheets WHERE date LIKE :term ORDER BY id ASC");
+        $stmt->execute([':term' => $term]);
+        return $stmt->fetchAll();
+    }
 }
 
 function get_paysheet_entry($id) {
