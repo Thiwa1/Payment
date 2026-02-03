@@ -1,20 +1,31 @@
 <?php
-// Ensure vendor autoload exists
-if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
-    die("Error: 'vendor/autoload.php' not found. Please run 'composer install' in the project root to install dependencies.");
+// export_logic.php
+
+// Check dependencies without dying immediately
+$has_dependencies = file_exists(__DIR__ . '/vendor/autoload.php');
+
+if ($has_dependencies) {
+    require 'vendor/autoload.php';
+
+    // Import classes only if dependencies exist
+    // Note: We cannot use 'use' statement conditionally in global scope easily in a way that prevents error if class missing?
+    // Actually 'use' is compile time, but autoload happens at runtime usage.
+    // So 'use' is fine as long as we don't instantiate if missing.
 }
-require 'vendor/autoload.php';
-require_once 'functions.php';
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-// ... (Rest of the file remains similar, I will rewrite the whole file to ensure it's complete)
+require_once 'functions.php';
+
+function check_dependencies() {
+    global $has_dependencies;
+    return $has_dependencies;
+}
 
 function get_payment_data($month_year = null) {
-    // ... (This function uses 'payments' table, not 'paysheets')
     if (!$month_year) {
         $month_year = date('F Y');
     }
@@ -37,6 +48,10 @@ function get_payment_data($month_year = null) {
 }
 
 function generate_fuel_allowance_report($month_year = null) {
+    if (!check_dependencies()) {
+        throw new Exception("Dependencies missing. Please run 'composer install'.");
+    }
+
     $rows = get_payment_data($month_year);
 
     $spreadsheet = new Spreadsheet();
@@ -76,6 +91,10 @@ function generate_fuel_allowance_report($month_year = null) {
 }
 
 function generate_bank_transfer_report($month_year = null) {
+    if (!check_dependencies()) {
+        throw new Exception("Dependencies missing. Please run 'composer install'.");
+    }
+
     $rows = get_payment_data($month_year);
 
     $spreadsheet = new Spreadsheet();
@@ -147,6 +166,10 @@ function generate_bank_transfer_report($month_year = null) {
 }
 
 function generate_paysheet_excel($month_year = null) {
+    if (!check_dependencies()) {
+        throw new Exception("Dependencies missing. Please run 'composer install'.");
+    }
+
     $rows = get_paysheet_data($month_year);
 
     $spreadsheet = new Spreadsheet();

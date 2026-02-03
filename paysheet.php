@@ -21,15 +21,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_paysheet'])) {
 
 // Handle Export
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export_excel'])) {
-    $month = $_POST['month_year'] ?? date('Y-m');
-    $spreadsheet = generate_paysheet_excel($month);
-    $filename = "paysheet_$month.xlsx";
+    if (!check_dependencies()) {
+        $error = "Dependencies missing. Please run 'composer install' in the project root to generate Excel files.";
+    } else {
+        $month = $_POST['month_year'] ?? date('Y-m');
+        $spreadsheet = generate_paysheet_excel($month);
+        $filename = "paysheet_$month.xlsx";
 
-    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment; filename="'. urlencode($filename).'"');
-    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-    $writer->save('php://output');
-    exit;
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="'. urlencode($filename).'"');
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
 }
 
 // Get Data for Display
