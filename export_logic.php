@@ -1,4 +1,8 @@
 <?php
+// Ensure vendor autoload exists
+if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
+    die("Error: 'vendor/autoload.php' not found. Please run 'composer install' in the project root to install dependencies.");
+}
 require 'vendor/autoload.php';
 require_once 'functions.php';
 
@@ -7,19 +11,146 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-// Keep old export functions for reference? The prompt implies replacing.
-// I will just add the new one.
+// ... (Rest of the file remains similar, I will rewrite the whole file to ensure it's complete)
+
+function get_payment_data($month_year = null) {
+    // ... (This function uses 'payments' table, not 'paysheets')
+    if (!$month_year) {
+        $month_year = date('F Y');
+    }
+
+    if (preg_match('/^\d{4}-\d{2}$/', $month_year)) {
+        $current_month_prefix = $month_year;
+    } else {
+        $current_month_prefix = date('Y-m');
+    }
+
+    $pdo = getDBConnection();
+    $sql = "SELECT e.calling_name, e.employee_number, e.account_name, e.bank, e.branch, e.nic_no, e.account_number, e.area, p.amount, p.payment_date
+            FROM payments p
+            JOIN employees e ON p.employee_id = e.id
+            WHERE p.payment_date LIKE :month_prefix";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':month_prefix' => "$current_month_prefix%"]);
+    return $stmt->fetchAll();
+}
+
+function generate_fuel_allowance_report($month_year = null) {
+    $rows = get_payment_data($month_year);
+
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+
+    $sheet->setCellValue('A1', "Fuel Allowance for the month of " . date('d.m.Y'));
+    $sheet->mergeCells('A1:H1');
+    $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+    $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+    $headers = ['Calling Name', 'Emp #', 'Account Name', 'Bank', 'BRNCH', 'Account No', 'Area', 'Amount'];
+    $columnLetter = 'A';
+    foreach ($headers as $header) {
+        $sheet->setCellValue($columnLetter . '2', $header);
+        $sheet->getStyle($columnLetter . '2')->getFont()->setBold(true);
+        $columnLetter++;
+    }
+
+    $rowNum = 3;
+    foreach ($rows as $row) {
+        $sheet->setCellValue('A' . $rowNum, $row['calling_name']);
+        $sheet->setCellValue('B' . $rowNum, $row['employee_number']);
+        $sheet->setCellValue('C' . $rowNum, $row['account_name']);
+        $sheet->setCellValue('D' . $rowNum, $row['bank']);
+        $sheet->setCellValue('E' . $rowNum, $row['branch']);
+        $sheet->setCellValue('F' . $rowNum, $row['account_number']);
+        $sheet->setCellValue('G' . $rowNum, $row['area']);
+        $sheet->setCellValue('H' . $rowNum, $row['amount']);
+        $rowNum++;
+    }
+
+    foreach (range('A', 'H') as $col) {
+        $sheet->getColumnDimension($col)->setAutoSize(true);
+    }
+
+    return $spreadsheet;
+}
+
+function generate_bank_transfer_report($month_year = null) {
+    $rows = get_payment_data($month_year);
+
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+
+    $sheet->setCellValue('A1', "Reference\nNo (Max 8\nDigits)");
+    $sheet->setCellValue('B1', "Staff / Supplier Account Name");
+    $sheet->setCellValue('C1', "Bank Name\n(For the Banks not existing in the list\ntype only the Bank Code)");
+    $sheet->setCellValue('D1', "Branch Name\n(For the Branches not\nexisting in the list type\nonly the Branch Code)");
+    $sheet->setCellValue('E1', "Staff / Supplier\nCredit Account No");
+    $sheet->setCellValue('F1', "Transaction Code");
+    $sheet->setCellValue('G1', "Amount");
+    $sheet->setCellValue('H1', "Rs.");
+
+    $sheet->setCellValue('I1', "Value Date");
+    $sheet->mergeCells('I1:K1');
+    $sheet->setCellValue('I2', 'YYYY');
+    $sheet->setCellValue('J2', 'MM');
+    $sheet->setCellValue('K2', 'DD');
+
+    $sheet->setCellValue('L1', "Remark");
+
+    $mergeCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L'];
+    foreach ($mergeCols as $col) {
+        $sheet->mergeCells("{$col}1:{$col}2");
+    }
+
+    $headerStyle = [
+        'font' => ['bold' => true],
+        'alignment' => [
+            'horizontal' => Alignment::HORIZONTAL_CENTER,
+            'vertical' => Alignment::VERTICAL_CENTER,
+            'wrapText' => true
+        ],
+        'fill' => [
+            'fillType' => Fill::FILL_SOLID,
+            'startColor' => ['argb' => 'FFD3D3D3']
+        ]
+    ];
+    $sheet->getStyle('A1:L2')->applyFromArray($headerStyle);
+
+    $rowNum = 3;
+    foreach ($rows as $row) {
+        $refNo = substr(preg_replace('/\D/', '', $row['employee_number']), 0, 8);
+
+        $sheet->setCellValue('A' . $rowNum, $refNo);
+        $sheet->setCellValue('B' . $rowNum, $row['account_name']);
+        $sheet->setCellValue('C' . $rowNum, $row['bank']);
+        $sheet->setCellValue('D' . $rowNum, $row['branch']);
+        $sheet->setCellValue('E' . $rowNum, $row['account_number']);
+        $sheet->setCellValue('F' . $rowNum, '23');
+        $sheet->setCellValue('G' . $rowNum, $row['amount']);
+        $sheet->setCellValue('H' . $rowNum, '00');
+
+        $pDate = strtotime($row['payment_date']);
+        $sheet->setCellValue('I' . $rowNum, date('Y', $pDate));
+        $sheet->setCellValue('J' . $rowNum, date('m', $pDate));
+        $sheet->setCellValue('K' . $rowNum, date('d', $pDate));
+        $sheet->setCellValue('L' . $rowNum, "Fuel Allowance");
+
+        $rowNum++;
+    }
+
+    foreach (range('A', 'L') as $col) {
+        $sheet->getColumnDimension($col)->setAutoSize(true);
+    }
+
+    return $spreadsheet;
+}
 
 function generate_paysheet_excel($month_year = null) {
     $rows = get_paysheet_data($month_year);
 
     $spreadsheet = new Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
-
-    // Headers
-    // No., Emp Code, Name, Designation, WORKING PLACE / PROJECT, PROJECT HEAD, STATUS, BASIC SALARY,
-    // Travelling Allowance, Vehicle Allowance, Arreas, GROSS PAY, SALARY NOPAY DAYS, NOPAY FOR BUDGETORY,
-    // NOPAY FOR OTHER, EPF 8%, Salary Advance, Staff Loan, Communication Deduction, NET PAY, HOLD
 
     $headers = [
         'No.', 'Emp Code', 'Name', 'Designation', 'WORKING PLACE / PROJECT', 'PROJECT HEAD', 'STATUS',
@@ -28,7 +159,6 @@ function generate_paysheet_excel($month_year = null) {
         'Salary Advance', 'Staff Loan', 'Communication Deduction', 'NET PAY', 'HOLD'
     ];
 
-    // Header Row
     $col = 'A';
     foreach ($headers as $header) {
         $sheet->setCellValue($col . '1', $header);
@@ -37,11 +167,9 @@ function generate_paysheet_excel($month_year = null) {
         $col++;
     }
 
-    // Data
     $rowNum = 2;
     $count = 1;
     foreach ($rows as $row) {
-        // Map DB columns to Excel columns order
         $sheet->setCellValue('A' . $rowNum, $count++);
         $sheet->setCellValue('B' . $rowNum, $row['emp_code']);
         $sheet->setCellValue('C' . $rowNum, $row['name']);
@@ -67,7 +195,6 @@ function generate_paysheet_excel($month_year = null) {
         $rowNum++;
     }
 
-    // Auto size
     foreach (range('A', 'U') as $columnID) {
         $sheet->getColumnDimension($columnID)->setAutoSize(true);
     }

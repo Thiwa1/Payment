@@ -1,7 +1,107 @@
 <?php
 require_once 'db_adapter.php';
 
-// Old functions kept for reference but new logic is prioritized
+// --- Employee Management Functions ---
+
+function add_employee($data) {
+    $pdo = getDBConnection();
+    // Using MySQL specific syntax for INSERT IGNORE or ON DUPLICATE if needed?
+    // Standard INSERT is fine, assuming checks are handled or unique constraints throw error.
+
+    $sql = "INSERT INTO employees (calling_name, account_name, employee_number, bank, branch, nic_no, account_number, area)
+            VALUES (:calling_name, :account_name, :employee_number, :bank, :branch, :nic_no, :account_number, :area)";
+    $stmt = $pdo->prepare($sql);
+    try {
+        $stmt->execute([
+            ':calling_name' => $data['calling_name'],
+            ':account_name' => $data['account_name'],
+            ':employee_number' => $data['employee_number'],
+            ':bank' => $data['bank'],
+            ':branch' => $data['branch'],
+            ':nic_no' => $data['nic_no'],
+            ':account_number' => $data['account_number'],
+            ':area' => $data['area']
+        ]);
+        return true;
+    } catch (PDOException $e) {
+        // In a real app, handle duplicate errors gracefully
+        return false;
+    }
+}
+
+function get_employees() {
+    $pdo = getDBConnection();
+    // Check if table exists first? The setup script should have run.
+    try {
+        $stmt = $pdo->query("SELECT * FROM employees ORDER BY id DESC");
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+function get_employee_by_search($term) {
+    $pdo = getDBConnection();
+    $term = "%$term%";
+    $stmt = $pdo->prepare("SELECT * FROM employees WHERE calling_name LIKE :term OR employee_number LIKE :term OR nic_no LIKE :term");
+    $stmt->execute([':term' => $term]);
+    return $stmt->fetchAll();
+}
+
+function get_employee_by_id($id) {
+    $pdo = getDBConnection();
+    $stmt = $pdo->prepare("SELECT * FROM employees WHERE id = :id");
+    $stmt->execute([':id' => $id]);
+    return $stmt->fetch();
+}
+
+function bulk_upload_employees($file_path) {
+    if (!file_exists($file_path)) {
+        return false;
+    }
+
+    $handle = fopen($file_path, "r");
+    if ($handle === FALSE) {
+        return false;
+    }
+
+    $header = fgetcsv($handle);
+
+    $count = 0;
+    while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+        if (count($data) < 8) continue;
+
+        $emp_data = [
+            'calling_name' => $data[0],
+            'account_name' => $data[1],
+            'employee_number' => $data[2],
+            'bank' => $data[3],
+            'branch' => $data[4],
+            'nic_no' => $data[5],
+            'account_number' => $data[6],
+            'area' => $data[7]
+        ];
+
+        if (add_employee($emp_data)) {
+            $count++;
+        }
+    }
+    fclose($handle);
+    return $count;
+}
+
+function save_payment($employee_id, $amount, $payment_date) {
+    $pdo = getDBConnection();
+    $sql = "INSERT INTO payments (employee_id, amount, payment_date) VALUES (:employee_id, :amount, :payment_date)";
+    $stmt = $pdo->prepare($sql);
+    return $stmt->execute([
+        ':employee_id' => $employee_id,
+        ':amount' => $amount,
+        ':payment_date' => $payment_date
+    ]);
+}
+
+// --- Paysheet Functions ---
 
 function bulk_upload_paysheet($file_path, $date) {
     if (!file_exists($file_path)) {
@@ -16,12 +116,21 @@ function bulk_upload_paysheet($file_path, $date) {
     // Expected Header Order based on prompt:
     // No., Emp Code, Name, Designation, WORKING PLACE / PROJECT, PROJECT HEAD, STATUS, BASIC SALARY,
     // Travelling Allowance, Vehicle Allowance, Arreas, GROSS PAY, SALARY NOPAY DAYS, NOPAY FOR BUDGETORY,
-    // NOPAY FOR OTHER, EPF 8%, Salary Advance, Staff Loan, Communication Deduction, NET PAY, HOLD
+    // NOPAY FOR OTHER, EPF 8%, Salary Advance, Staff Loan, Communication Deduction, NET PAY, HOLD,
+    // (New fields potentially: BRA, Festival Advance, Fuel Deduction)
 
     // We skip the first row (header)
     $header = fgetcsv($handle);
 
     $pdo = getDBConnection();
+
+    // Check if new columns exist? Assuming setup_database.php adds them or they exist.
+    // I will add them to the query if I update the table.
+    // For now, let's stick to the previous schema + new fields if I decide to add them.
+    // The previous prompt iteration established the schema.
+    // I'll update this function when I update the DB schema in the next step.
+    // For now, restoring the previous logic for paysheet upload.
+
     $sql = "INSERT INTO paysheets (
         date, emp_code, name, designation, working_place, project_head, status,
         basic_salary, travelling_allowance, vehicle_allowance, arrears, gross_pay,
@@ -37,10 +146,6 @@ function bulk_upload_paysheet($file_path, $date) {
 
     $count = 0;
     while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-        // Basic validation: ensure we have enough columns?
-        // Or assume the CSV is well formed. The list has about 21 columns.
-        // Data[0] is No. (skip or ignore)
-
         try {
             $stmt->execute([
                 ':date' => $date,
@@ -67,7 +172,6 @@ function bulk_upload_paysheet($file_path, $date) {
             ]);
             $count++;
         } catch (PDOException $e) {
-            // Log error or continue
             continue;
         }
     }
@@ -77,30 +181,21 @@ function bulk_upload_paysheet($file_path, $date) {
 
 function clean_number($val) {
     if (is_numeric($val)) return $val;
-    // Remove commas, currency symbols etc if present
     return floatval(preg_replace('/[^\d.-]/', '', $val));
 }
 
 function get_paysheet_data($month_year) {
-    // $month_year format YYYY-MM
     $pdo = getDBConnection();
-    // Assuming 'date' column in DB is stored as YYYY-MM-DD or just a string date.
-    // If we pass YYYY-MM, we should match roughly.
     $term = "$month_year%";
     $stmt = $pdo->prepare("SELECT * FROM paysheets WHERE date LIKE :term ORDER BY id ASC");
     $stmt->execute([':term' => $term]);
     return $stmt->fetchAll();
 }
 
-// Keeping old functions just in case, but they use 'db_connect.php' logic.
-// We should update them to use 'db_adapter.php' if we want to support the old interface too.
-// For now, I'll update the getDBConnection call in them implicitly by including db_adapter.
-// But wait, the old functions called `getDBConnection` which is now in `db_adapter.php`.
-// So they should work fine if I just require `db_adapter.php` instead of `db_connect.php`.
-// Wait, `db_connect.php` was creating a new function with same name?
-// I should delete `db_connect.php` to avoid conflict or update it to be a wrapper.
-// `db_adapter.php` defines `getDBConnection`.
-// The previous step created `db_adapter.php`. `db_connect.php` still exists?
-// Yes. I should remove `db_connect.php` or make it require `db_adapter.php`.
-
+function get_paysheet_entry($id) {
+    $pdo = getDBConnection();
+    $stmt = $pdo->prepare("SELECT * FROM paysheets WHERE id = :id");
+    $stmt->execute([':id' => $id]);
+    return $stmt->fetch();
+}
 ?>

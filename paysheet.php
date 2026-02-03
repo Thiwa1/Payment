@@ -100,6 +100,7 @@ include 'header.php';
                 <th>Gross Pay</th>
                 <th>Net Pay</th>
                 <th>Hold</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
@@ -115,6 +116,9 @@ include 'header.php';
                     <td><?= number_format($row['gross_pay'], 2) ?></td>
                     <td><?= number_format($row['net_pay'], 2) ?></td>
                     <td><?= htmlspecialchars($row['hold']) ?></td>
+                    <td>
+                        <a href="payslip.php?id=<?= $row['id'] ?>" target="_blank">View Payslip</a>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
             <?php else: ?>
