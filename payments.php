@@ -18,6 +18,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_payment'])) {
     }
 }
 
+// Handle Delete Payment
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_payment_id'])) {
+    if (delete_payment($_POST['delete_payment_id'])) {
+        $message = "Payment deleted successfully.";
+    } else {
+        $message = "Failed to delete payment.";
+    }
+}
+
 // Handle Export Today
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['download_today'])) {
     $date = date('Y-m-d');
@@ -25,13 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['download_today'])) {
     // If CSV fallback was triggered, script would have exited in generate_bank_transfer_report
 
     // Otherwise, handle Excel output
-    $filename = "bank_transfer_$date.xlsx";
-    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment; filename="'. urlencode($filename).'"');
-    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-    $writer->save('php://output');
-    exit;
+    if ($spreadsheet instanceof \PhpOffice\PhpSpreadsheet\Spreadsheet) {
+        $filename = "bank_transfer_$date.xlsx";
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="'. urlencode($filename).'"');
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
 }
+
+$recent_payments = get_recent_payments();
 
 include 'header.php';
 ?>
@@ -87,6 +100,40 @@ include 'header.php';
     </table>
 <?php elseif (isset($_GET['search'])): ?>
     <p>No employees found.</p>
+<?php endif; ?>
+
+<hr>
+<h2>Recent Payments</h2>
+<?php if (count($recent_payments) > 0): ?>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Emp No</th>
+                <th>Name</th>
+                <th>Amount</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($recent_payments as $pmt): ?>
+            <tr>
+                <td><?= htmlspecialchars($pmt['payment_date']) ?></td>
+                <td><?= htmlspecialchars($pmt['employee_number']) ?></td>
+                <td><?= htmlspecialchars($pmt['calling_name']) ?></td>
+                <td><?= number_format($pmt['amount'], 2) ?></td>
+                <td>
+                    <form method="POST" onsubmit="return confirm('Are you sure you want to delete this payment?');">
+                        <input type="hidden" name="delete_payment_id" value="<?= $pmt['id'] ?>">
+                        <button type="submit" style="background-color: #dc3545;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+<?php else: ?>
+    <p>No recent payments found.</p>
 <?php endif; ?>
 
 <?php include 'footer.php'; ?>

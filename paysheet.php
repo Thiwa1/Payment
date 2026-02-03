@@ -21,19 +21,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_paysheet'])) {
 
 // Handle Export
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export_excel'])) {
-    if (!check_dependencies()) {
-        $error = "Dependencies missing. Please run 'composer install' in the project root to generate Excel files.";
-    } else {
-        $month = $_POST['month_year'] ?? date('Y-m');
-        $spreadsheet = generate_paysheet_excel($month);
-        $filename = "paysheet_$month.xlsx";
+    $month = $_POST['month_year'] ?? date('Y-m');
+    $spreadsheet = generate_paysheet_excel($month);
 
+    // Check if we got an object (Excel) or if output was handled (CSV fallback happened inside function)
+    if ($spreadsheet instanceof \PhpOffice\PhpSpreadsheet\Spreadsheet) {
+        $filename = "paysheet_$month.xlsx";
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="'. urlencode($filename).'"');
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         $writer->save('php://output');
         exit;
     }
+    // If null/void, CSV was likely downloaded and script exited in export_logic.php
 }
 
 // Get Data for Display

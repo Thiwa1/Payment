@@ -61,12 +61,6 @@ function bulk_upload_employees($file_path) {
         return ['count' => 0, 'errors' => ["Cannot open file"]];
     }
 
-    // Skip Header?
-    // We should be smarter. If the user provides a CSV, usually the first row IS header.
-    // But if it fails to find any valid rows, maybe the first row WAS data?
-    // Let's stick to standard practice: First row is Header.
-    // However, I will capture specific errors for rows.
-
     $header = fgetcsv($handle);
 
     $count = 0;
@@ -74,7 +68,6 @@ function bulk_upload_employees($file_path) {
     $rowNum = 2; // Starting after header
 
     while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-        // If empty row
         if (empty($data) || (count($data) == 1 && empty($data[0]))) {
             continue;
         }
@@ -118,6 +111,25 @@ function save_payment($employee_id, $amount, $payment_date) {
     ]);
 }
 
+function get_recent_payments($limit = 20) {
+    $pdo = getDBConnection();
+    // Use SQL to join with employees
+    $sql = "SELECT p.id, p.payment_date, p.amount, e.calling_name, e.employee_number
+            FROM payments p
+            JOIN employees e ON p.employee_id = e.id
+            ORDER BY p.id DESC LIMIT :limit";
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+function delete_payment($id) {
+    $pdo = getDBConnection();
+    $stmt = $pdo->prepare("DELETE FROM payments WHERE id = :id");
+    return $stmt->execute([':id' => $id]);
+}
+
 // --- Paysheet Functions ---
 
 function bulk_upload_paysheet($file_path, $date) {
@@ -130,7 +142,6 @@ function bulk_upload_paysheet($file_path, $date) {
         return false;
     }
 
-    // Header logic similar to employees
     $header = fgetcsv($handle);
 
     $pdo = getDBConnection();
