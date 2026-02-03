@@ -6,23 +6,59 @@ require_once 'db_adapter.php';
 function add_employee($data) {
     $pdo = getDBConnection();
 
-    $sql = "INSERT INTO employees (calling_name, account_name, employee_number, bank, branch, nic_no, account_number, area)
-            VALUES (:calling_name, :account_name, :employee_number, :bank, :branch, :nic_no, :account_number, :area)";
-    $stmt = $pdo->prepare($sql);
-    try {
-        $stmt->execute([
-            ':calling_name' => $data['calling_name'],
-            ':account_name' => $data['account_name'],
-            ':employee_number' => $data['employee_number'],
-            ':bank' => $data['bank'],
-            ':branch' => $data['branch'],
-            ':nic_no' => $data['nic_no'],
-            ':account_number' => $data['account_number'],
-            ':area' => $data['area']
-        ]);
-        return true;
-    } catch (PDOException $e) {
-        return false;
+    // Check if employee exists by Employee Number (Primary unique identifier for business logic)
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :en");
+    $stmt->execute([':en' => $data['employee_number']]);
+    $existing = $stmt->fetch();
+
+    if ($existing) {
+        // Update existing record
+        $sql = "UPDATE employees SET
+                calling_name = :calling_name,
+                account_name = :account_name,
+                bank = :bank,
+                branch = :branch,
+                nic_no = :nic_no,
+                account_number = :account_number,
+                area = :area
+                WHERE id = :id";
+        $stmt = $pdo->prepare($sql);
+        try {
+            $stmt->execute([
+                ':calling_name' => $data['calling_name'],
+                ':account_name' => $data['account_name'],
+                ':bank' => $data['bank'],
+                ':branch' => $data['branch'],
+                ':nic_no' => $data['nic_no'],
+                ':account_number' => $data['account_number'],
+                ':area' => $data['area'],
+                ':id' => $existing['id']
+            ]);
+            return true;
+        } catch (PDOException $e) {
+            // Update might fail if NIC or Account Number conflicts with *another* employee (not the one we are updating)
+            return false;
+        }
+    } else {
+        // Insert new record
+        $sql = "INSERT INTO employees (calling_name, account_name, employee_number, bank, branch, nic_no, account_number, area)
+                VALUES (:calling_name, :account_name, :employee_number, :bank, :branch, :nic_no, :account_number, :area)";
+        $stmt = $pdo->prepare($sql);
+        try {
+            $stmt->execute([
+                ':calling_name' => $data['calling_name'],
+                ':account_name' => $data['account_name'],
+                ':employee_number' => $data['employee_number'],
+                ':bank' => $data['bank'],
+                ':branch' => $data['branch'],
+                ':nic_no' => $data['nic_no'],
+                ':account_number' => $data['account_number'],
+                ':area' => $data['area']
+            ]);
+            return true;
+        } catch (PDOException $e) {
+            return false;
+        }
     }
 }
 
@@ -92,7 +128,7 @@ function bulk_upload_employees($file_path) {
         if (add_employee($emp_data)) {
             $count++;
         } else {
-            $errors[] = "Row $rowNum: Failed to add (Duplicate Emp No/NIC/Acc No or invalid data).";
+            $errors[] = "Row $rowNum: Failed to add/update (Check for duplicate NIC/Acc No with other employees).";
         }
         $rowNum++;
     }
