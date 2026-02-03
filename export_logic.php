@@ -1,16 +1,10 @@
 <?php
 // export_logic.php
 
-// Check dependencies without dying immediately
 $has_dependencies = file_exists(__DIR__ . '/vendor/autoload.php');
 
 if ($has_dependencies) {
     require 'vendor/autoload.php';
-
-    // Import classes only if dependencies exist
-    // Note: We cannot use 'use' statement conditionally in global scope easily in a way that prevents error if class missing?
-    // Actually 'use' is compile time, but autoload happens at runtime usage.
-    // So 'use' is fine as long as we don't instantiate if missing.
 }
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -30,34 +24,62 @@ function get_payment_data($month_year = null) {
         $month_year = date('F Y');
     }
 
-    if (preg_match('/^\d{4}-\d{2}$/', $month_year)) {
-        $current_month_prefix = $month_year;
+    // Support YYYY-MM or YYYY-MM-DD (for specific day reports)
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $month_year)) {
+        $term = $month_year; // Exact match for day
+    } elseif (preg_match('/^\d{4}-\d{2}$/', $month_year)) {
+        $term = "$month_year%"; // Month prefix
     } else {
-        $current_month_prefix = date('Y-m');
+        $term = date('Y-m') . "%";
     }
 
     $pdo = getDBConnection();
     $sql = "SELECT e.calling_name, e.employee_number, e.account_name, e.bank, e.branch, e.nic_no, e.account_number, e.area, p.amount, p.payment_date
             FROM payments p
             JOIN employees e ON p.employee_id = e.id
-            WHERE p.payment_date LIKE :month_prefix";
+            WHERE p.payment_date LIKE :term";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([':month_prefix' => "$current_month_prefix%"]);
+    $stmt->execute([':term' => $term]);
     return $stmt->fetchAll();
 }
 
-function generate_fuel_allowance_report($month_year = null) {
-    if (!check_dependencies()) {
-        throw new Exception("Dependencies missing. Please run 'composer install'.");
-    }
+function export_to_csv($headers, $rows, $filename) {
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
 
+    $output = fopen('php://output', 'w');
+    fputcsv($output, $headers);
+
+    foreach ($rows as $row) {
+        fputcsv($output, $row);
+    }
+    fclose($output);
+    exit;
+}
+
+function generate_fuel_allowance_report($month_year = null) {
     $rows = get_payment_data($month_year);
+
+    if (!check_dependencies()) {
+        // Fallback to CSV
+        $headers = ['Calling Name', 'Emp #', 'Account Name', 'Bank', 'Branch', 'Account No', 'Area', 'Amount'];
+        $csv_rows = [];
+        foreach ($rows as $row) {
+            $csv_rows[] = [
+                $row['calling_name'], $row['employee_number'], $row['account_name'],
+                $row['bank'], $row['branch'], $row['account_number'],
+                $row['area'], $row['amount']
+            ];
+        }
+        export_to_csv($headers, $csv_rows, "fuel_allowance_$month_year.csv");
+        return;
+    }
 
     $spreadsheet = new Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
 
-    $sheet->setCellValue('A1', "Fuel Allowance for the month of " . date('d.m.Y'));
+    $sheet->setCellValue('A1', "Fuel Allowance for " . ($month_year ?? date('Y-m-d')));
     $sheet->mergeCells('A1:H1');
     $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
     $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -91,11 +113,23 @@ function generate_fuel_allowance_report($month_year = null) {
 }
 
 function generate_bank_transfer_report($month_year = null) {
-    if (!check_dependencies()) {
-        throw new Exception("Dependencies missing. Please run 'composer install'.");
-    }
-
     $rows = get_payment_data($month_year);
+
+    if (!check_dependencies()) {
+        // Fallback to CSV (Simplified structure)
+        $headers = ['Ref No', 'Account Name', 'Bank', 'Branch', 'Credit Acc No', 'Tran Code', 'Amount', 'Currency', 'Value Date', 'Remark'];
+        $csv_rows = [];
+        foreach ($rows as $row) {
+            $refNo = substr(preg_replace('/\D/', '', $row['employee_number']), 0, 8);
+            $csv_rows[] = [
+                $refNo, $row['account_name'], $row['bank'], $row['branch'],
+                $row['account_number'], '23', $row['amount'], 'LKR',
+                $row['payment_date'], 'Fuel Allowance'
+            ];
+        }
+        export_to_csv($headers, $csv_rows, "bank_transfer_$month_year.csv");
+        return;
+    }
 
     $spreadsheet = new Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
@@ -166,11 +200,31 @@ function generate_bank_transfer_report($month_year = null) {
 }
 
 function generate_paysheet_excel($month_year = null) {
-    if (!check_dependencies()) {
-        throw new Exception("Dependencies missing. Please run 'composer install'.");
-    }
-
     $rows = get_paysheet_data($month_year);
+
+    if (!check_dependencies()) {
+        // Fallback to CSV
+        $headers = [
+            'No.', 'Emp Code', 'Name', 'Designation', 'WORKING PLACE / PROJECT', 'PROJECT HEAD', 'STATUS',
+            'BASIC SALARY', 'Travelling Allowance', 'Vehicle Allowance', 'Arreas', 'GROSS PAY',
+            'SALARY NOPAY DAYS', 'NOPAY FOR BUDGETORY', 'NOPAY FOR OTHER', 'EPF 8%',
+            'Salary Advance', 'Staff Loan', 'Communication Deduction', 'NET PAY', 'HOLD'
+        ];
+        // Need to construct rows to match header order exactly
+        $csv_rows = [];
+        $count = 1;
+        foreach ($rows as $row) {
+            $csv_rows[] = [
+                $count++, $row['emp_code'], $row['name'], $row['designation'], $row['working_place'],
+                $row['project_head'], $row['status'], $row['basic_salary'], $row['travelling_allowance'],
+                $row['vehicle_allowance'], $row['arrears'], $row['gross_pay'], $row['salary_nopay_days'],
+                $row['nopay_budgetory'], $row['nopay_other'], $row['epf_8'], $row['salary_advance'],
+                $row['staff_loan'], $row['communication_deduction'], $row['net_pay'], $row['hold']
+            ];
+        }
+        export_to_csv($headers, $csv_rows, "paysheet_$month_year.csv");
+        return;
+    }
 
     $spreadsheet = new Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();

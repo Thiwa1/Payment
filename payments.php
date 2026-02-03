@@ -1,5 +1,6 @@
 <?php
 require_once 'functions.php';
+require_once 'export_logic.php';
 
 $message = '';
 $results = [];
@@ -8,6 +9,7 @@ if (isset($_GET['search'])) {
     $results = get_employee_by_search($_GET['search']);
 }
 
+// Handle Payment Save
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_payment'])) {
     if (save_payment($_POST['employee_id'], $_POST['amount'], date('Y-m-d'))) {
         $message = "Payment of " . htmlspecialchars($_POST['amount']) . " saved for Employee ID " . htmlspecialchars($_POST['employee_id']);
@@ -16,12 +18,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_payment'])) {
     }
 }
 
+// Handle Export Today
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['download_today'])) {
+    $date = date('Y-m-d');
+    $spreadsheet = generate_bank_transfer_report($date);
+    // If CSV fallback was triggered, script would have exited in generate_bank_transfer_report
+
+    // Otherwise, handle Excel output
+    $filename = "bank_transfer_$date.xlsx";
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="'. urlencode($filename).'"');
+    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+    $writer->save('php://output');
+    exit;
+}
+
 include 'header.php';
 ?>
 
 <h1>Process Payments</h1>
 
 <?php if ($message): ?><div class="alert"><?= htmlspecialchars($message) ?></div><?php endif; ?>
+
+<!-- Export Section -->
+<div style="margin-bottom: 20px; text-align: right;">
+    <form method="POST" style="display:inline;">
+        <input type="hidden" name="download_today" value="1">
+        <button type="submit" style="background-color: #28a745;">Download Report (Today)</button>
+    </form>
+</div>
 
 <form method="GET" action="">
     <div class="form-group">
@@ -53,7 +78,7 @@ include 'header.php';
                         <input type="hidden" name="employee_id" value="<?= $emp['id'] ?>">
                         <input type="hidden" name="save_payment" value="1">
                         <input type="number" name="amount" placeholder="Amount" required step="0.01">
-                        <button type="submit">Save</button>
+                        <button type="submit">Save & Continue</button>
                     </form>
                 </td>
             </tr>
