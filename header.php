@@ -25,6 +25,7 @@
         <a href="index.php">Home</a>
         <a href="employees.php">Employees</a>
         <a href="payments.php">Payments</a>
+        <a href="paysheet.php">Paysheets</a>
         <a href="report.php">Reports</a>
     </nav>
     <div class="container">
