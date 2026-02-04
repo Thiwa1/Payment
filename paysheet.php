@@ -120,6 +120,7 @@ include 'header.php';
                 <div class="form-group">
                     <label>CSV File</label>
                     <input type="file" name="csv_file" accept=".csv" required>
+                    <a href="download_template.php?type=paysheet" style="margin-left: 10px; font-size: 0.9em;">Download Template</a>
                 </div>
                 <button type="submit">Upload CSV</button>
             </form>

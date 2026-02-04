@@ -14,6 +14,19 @@ if (!$employee) {
 
 $history = get_employee_payment_history($id);
 
+// Handle Export
+if (isset($_POST['export_history'])) {
+    require_once 'export_logic.php'; // Ensure CSV function is available
+    $filename = "history_" . $employee['employee_number'] . ".csv";
+    $headers = ['Date', 'Schedule', 'Amount'];
+    $rows = [];
+    foreach ($history as $row) {
+        $rows[] = [$row['payment_date'], $row['schedule_name'], $row['amount']];
+    }
+    export_to_csv($headers, $rows, $filename);
+    exit;
+}
+
 include 'header.php';
 ?>
 
@@ -24,7 +37,14 @@ include 'header.php';
     <strong>Bank:</strong> <?= htmlspecialchars($employee['bank']) ?>
 </p>
 
-<a href="employees.php">&laquo; Back to Employees</a>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <a href="employees.php">&laquo; Back to Employees</a>
+
+    <form method="POST">
+        <input type="hidden" name="export_history" value="1">
+        <button type="submit" style="background-color: #28a745;">Export History (CSV)</button>
+    </form>
+</div>
 
 <hr>
 

@@ -76,8 +76,9 @@ include 'header.php';
 <form method="POST" enctype="multipart/form-data">
     <input type="hidden" name="upload_csv" value="1">
     <div class="form-group">
-        <label>Select CSV File (Format: Calling Name, Account Name, Emp No, Bank, Branch, NIC, Acc No, Area)</label>
+        <label>Select CSV File</label>
         <input type="file" name="csv_file" accept=".csv" required>
+        <a href="download_template.php?type=employees" style="margin-left: 10px; font-size: 0.9em;">Download Template</a>
     </div>
     <button type="submit">Upload CSV</button>
 </form>
