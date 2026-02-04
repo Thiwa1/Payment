@@ -108,7 +108,10 @@ include 'header.php';
             <td><?= htmlspecialchars($emp['nic_no']) ?></td>
             <td><?= htmlspecialchars($emp['account_number']) ?></td>
             <td><?= htmlspecialchars($emp['area']) ?></td>
-            <td><a href="edit_employee.php?id=<?= $emp['id'] ?>">Edit</a></td>
+            <td>
+                <a href="edit_employee.php?id=<?= $emp['id'] ?>">Edit</a> |
+                <a href="employee_history.php?id=<?= $emp['id'] ?>">History</a>
+            </td>
         </tr>
         <?php endforeach; ?>
     </tbody>

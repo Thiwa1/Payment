@@ -1,7 +1,7 @@
 <?php
 require_once 'db_adapter.php';
 
-// ... (Employee Functions omitted for brevity, keeping existing) ...
+// ... (Existing Functions) ...
 function add_employee($data) {
     $pdo = getDBConnection();
     $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :en");
@@ -44,18 +44,13 @@ function bulk_upload_employees($file_path) {
     return ['count' => $count, 'errors' => $errors];
 }
 
-// --- Payment Functions (Updated) ---
+// --- Payment Functions ---
 
 function save_payment($employee_id, $amount, $payment_date, $schedule_id) {
     $pdo = getDBConnection();
     $sql = "INSERT INTO payments (schedule_id, employee_id, amount, payment_date) VALUES (:schedule_id, :employee_id, :amount, :payment_date)";
     $stmt = $pdo->prepare($sql);
-    return $stmt->execute([
-        ':schedule_id' => $schedule_id,
-        ':employee_id' => $employee_id,
-        ':amount' => $amount,
-        ':payment_date' => $payment_date
-    ]);
+    return $stmt->execute([':schedule_id' => $schedule_id, ':employee_id' => $employee_id, ':amount' => $amount, ':payment_date' => $payment_date]);
 }
 
 function get_recent_payments($limit = 20) {
@@ -85,6 +80,18 @@ function get_payments_by_schedule($schedule_id) {
             WHERE p.schedule_id = :sid";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([':sid' => $schedule_id]);
+    return $stmt->fetchAll();
+}
+
+function get_employee_payment_history($employee_id) {
+    $pdo = getDBConnection();
+    $sql = "SELECT p.id, p.payment_date, p.amount, s.name as schedule_name
+            FROM payments p
+            LEFT JOIN schedules s ON p.schedule_id = s.id
+            WHERE p.employee_id = :eid
+            ORDER BY p.payment_date DESC";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':eid' => $employee_id]);
     return $stmt->fetchAll();
 }
 
@@ -124,7 +131,6 @@ function get_schedule_by_id($id) {
     return $stmt->fetch();
 }
 
-// ... (bulk_upload_paysheet and others retained) ...
 function bulk_upload_paysheet($file_path, $schedule_id, $date) {
     if (!file_exists($file_path)) return false;
     $handle = fopen($file_path, "r");
