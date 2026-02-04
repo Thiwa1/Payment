@@ -13,36 +13,34 @@ if (!$paysheet) {
 
 $month_year = date('F Y', strtotime($paysheet['date']));
 
-// Map DB columns to Pay Slip fields
-// Using explicit mapping based on available data and likely interpretations.
+// Data Mapping
 $basic_salary = $paysheet['basic_salary'];
-$bra = 0; // Not strictly in DB, maybe derive or leave 0? Or maybe 'arrears'? Let's assume 0 if not present.
-// Actually, input column "NOPAY FOR BUDGETORY" suggests Budgetory Relief Allowance exists.
-// But I don't have a column for BRA income. I'll stick to what I have.
+$bra = 0;
 $travelling = $paysheet['travelling_allowance'];
 $vehicle = $paysheet['vehicle_allowance'];
+$arrears = $paysheet['arrears'];
 
-$total_income = $basic_salary + $bra + $travelling + $vehicle;
+$total_income = $basic_salary + $bra + $travelling + $vehicle + $arrears;
 
 $nopay_days = $paysheet['salary_nopay_days'];
-$days_for_salary = 30.0; // Standard? Or 30 - nopay? The image shows "Days for Salary: 30.0" and "No Pay Days: 0.0".
-// Let's assume Days for Salary is fixed or calculated. If fixed 30:
 $days_for_salary = 30.0 - $nopay_days;
 
-// Earnings section (Repeated?)
 $gross_salary = $paysheet['gross_pay'];
 
-// Deductions
 $epf = $paysheet['epf_8'];
 $salary_advance = $paysheet['salary_advance'];
 $staff_loan = $paysheet['staff_loan'];
-$festival_advance = 0; // Not in DB
-$fuel = 0; // Not in DB
+$festival_advance = 0;
+$fuel = 0;
 $communication = $paysheet['communication_deduction'];
-$other_nopay = $paysheet['nopay_other']; // Maybe add this to total deduction?
+$other_nopay = $paysheet['nopay_other'];
 
 $total_deduction = $epf + $salary_advance + $staff_loan + $festival_advance + $fuel + $communication + $other_nopay;
 $net_salary = $paysheet['net_pay'];
+
+// Contribution Logic
+$epf_contribution = $basic_salary * 0.12;
+$etf_contribution = $basic_salary * 0.03;
 
 ?>
 <!DOCTYPE html>
@@ -51,34 +49,52 @@ $net_salary = $paysheet['net_pay'];
     <meta charset="UTF-8">
     <title>Pay Advice - <?= htmlspecialchars($paysheet['name']) ?></title>
     <style>
-        body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 14px; }
-        .container { width: 700px; margin: 20px auto; border: 2px solid #000; padding: 20px; }
+        @page {
+            size: A5 portrait; /* Half A4 */
+            margin: 10mm;
+        }
+        body {
+            font-family: 'Calibri', 'Arial', sans-serif;
+            font-size: 11px; /* Slightly smaller to fit */
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            width: 148mm; /* A5 Width */
+            /* height: 210mm; A5 Height */
+            margin: 0 auto;
+            background-color: white;
+            padding: 15px;
+            box-sizing: border-box;
+            border: 1px solid #ccc; /* For screen visibility */
+        }
         .header { text-align: center; font-weight: bold; }
-        .company-name { font-size: 18px; text-transform: uppercase; }
-        .address { font-size: 14px; font-weight: normal; }
-        .title { font-size: 16px; margin-top: 10px; text-decoration: underline; font-weight: bold; text-align: center;}
-        .month-row { border: 1px solid #000; text-align: center; font-weight: bold; padding: 5px; margin-top: 10px; background: #fff; }
+        .company-name { font-size: 14px; text-transform: uppercase; margin-bottom: 2px; }
+        .address { font-size: 10px; font-weight: normal; margin-bottom: 1px; }
+        .title { font-size: 12px; margin-top: 5px; text-decoration: underline; font-weight: bold; text-align: center;}
+        .month-row { border: 1px solid #000; text-align: center; font-weight: bold; padding: 3px; margin-top: 5px; font-size: 11px; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-        td { border: 1px solid #000; padding: 4px 8px; }
-        .label { width: 50%; }
-        .value { width: 50%; text-align: right; }
-        .section-header { font-weight: bold; text-decoration: underline; }
+        td { border: 1px solid #000; padding: 2px 5px; vertical-align: middle; }
+        .label { width: 60%; }
+        .value { width: 40%; text-align: right; }
+        .section-header { font-weight: bold; text-decoration: underline; background-color: #f9f9f9; }
         .total-row { font-weight: bold; border-top: 2px solid #000; border-bottom: 2px solid #000; }
-        .footer-note { font-size: 12px; margin-top: 10px; }
         .dashed { border-bottom: 1px dashed #ccc; }
 
         @media print {
+            body { background-color: white; }
             .no-print { display: none; }
-            .container { border: none; width: 100%; margin: 0; }
+            .container { border: none; width: 100%; margin: 0; padding: 0; }
         }
     </style>
 </head>
 <body>
 
-<div class="no-print" style="text-align: center; margin-bottom: 20px;">
-    <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Print Payslip</button>
-    <a href="paysheet.php" style="margin-left: 20px;">Back to Paysheets</a>
+<div class="no-print" style="text-align: center; padding: 10px;">
+    <button onclick="window.print()" style="padding: 8px 16px; font-size: 14px; cursor: pointer;">Print Payslip (A5)</button>
+    <a href="paysheet.php" style="margin-left: 20px;">Back</a>
 </div>
 
 <div class="container">
@@ -139,10 +155,10 @@ $net_salary = $paysheet['net_pay'];
             <td class="value"><?= number_format($days_for_salary, 1) ?></td>
         </tr>
 
-        <!-- Earnings Block (Repeated/Gross) -->
+        <!-- Earnings Block -->
         <tr>
             <td class="label section-header">Earnings</td>
-            <td class="value"></td>
+            <td class="value section-header"></td>
         </tr>
         <tr>
             <td class="label">Basic Salary</td>
@@ -160,11 +176,10 @@ $net_salary = $paysheet['net_pay'];
             <td class="label">Vehicle Allowance</td>
             <td class="value"><?= number_format($vehicle, 2) ?></td>
         </tr>
-         <!-- Maybe Arrears should be here? -->
-         <?php if ($paysheet['arrears'] > 0): ?>
+         <?php if ($arrears > 0): ?>
          <tr>
             <td class="label">Arrears</td>
-            <td class="value"><?= number_format($paysheet['arrears'], 2) ?></td>
+            <td class="value"><?= number_format($arrears, 2) ?></td>
         </tr>
          <?php endif; ?>
 
@@ -176,7 +191,7 @@ $net_salary = $paysheet['net_pay'];
         <!-- Deductions Block -->
         <tr>
             <td class="label section-header">Deductions</td>
-            <td class="value"></td>
+            <td class="value section-header"></td>
         </tr>
         <tr>
             <td class="label">EPF</td>
@@ -218,14 +233,14 @@ $net_salary = $paysheet['net_pay'];
             <td class="value"><?= number_format($net_salary, 2) ?></td>
         </tr>
 
-        <!-- EPF/ETF Contribution -->
+        <!-- Footer -->
         <tr>
-            <td class="label dashed" style="border:none; border-bottom: 1px dashed #000;">12% EPF Contribution</td>
-            <td class="value dashed" style="border:none; border-bottom: 1px dashed #000;">-</td>
+            <td class="label dashed" style="border:none; border-bottom: 1px dashed #000; padding-top: 10px;">12% EPF Contribution</td>
+            <td class="value dashed" style="border:none; border-bottom: 1px dashed #000; padding-top: 10px;"><?= number_format($epf_contribution, 2) ?></td>
         </tr>
         <tr>
             <td class="label dashed" style="border:none; border-bottom: 1px dashed #000;">3% ETF Contribution</td>
-            <td class="value dashed" style="border:none; border-bottom: 1px dashed #000;">-</td>
+            <td class="value dashed" style="border:none; border-bottom: 1px dashed #000;"><?= number_format($etf_contribution, 2) ?></td>
         </tr>
     </table>
 </div>
