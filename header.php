@@ -27,5 +27,6 @@
         <a href="payments.php">Payments</a>
         <a href="paysheet.php">Paysheets</a>
         <a href="report.php">Reports</a>
+        <a href="setup.php" style="float: right; margin-right: 0;">Status</a>
     </nav>
     <div class="container">

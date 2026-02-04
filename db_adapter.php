@@ -3,48 +3,49 @@
 // Tries to use config/database.php, handles missing DB creation, falls back to SQLite for sandbox.
 require_once 'init_db.php'; // Include schema logic
 
-// Load configuration ONCE
+// Load configuration logic securely
+$config_loaded = false;
+$pdo = null;
+
 if (file_exists(__DIR__ . '/config/database.php')) {
-    // Capture output to prevent "ERROR" strings from leaking
-    ob_start();
-    include_once __DIR__ . '/config/database.php';
-    ob_end_clean();
+    try {
+        // Suppress output and errors during inclusion to handle connection failures gracefully
+        ob_start();
+        include_once __DIR__ . '/config/database.php';
+        ob_end_clean();
+        $config_loaded = true;
+    } catch (Exception $e) {
+        // Exception caught from config/database.php
+        ob_end_clean(); // Ensure buffer is cleared
+    }
 }
 
 function getDBConnection() {
     global $pdo; // Check if $pdo exists from config/database.php
 
-    // If connection already established globally (in config), verify it's valid
-    if (isset($pdo) && $pdo instanceof PDO) {
-        // We could return it, but ensure_tables_exist needs running at least once?
-        // Actually, ensuring tables every time is safe but maybe redundant.
-        // Let's assume config established it correctly.
-        // However, the previous logic handled auto-creation logic *inside* here.
-        // If config/database.php throws exception, $pdo is null.
-    }
-
     $conn = null;
 
-    // Try using the PDO from config if it succeeded
+    // 1. Try using the PDO from config if it succeeded
     if (isset($pdo) && $pdo instanceof PDO) {
         $conn = $pdo;
     } else {
-        // Config failed or didn't exist. Check if constants are defined (from include_once above)
+        // 2. Config failed or didn't exist. Check if constants are defined
         if (defined('DB_HOST') && defined('DB_NAME') && defined('DB_USER') && defined('DB_PASS')) {
             try {
-                // Try connecting normally first
+                // Try connecting normally first (in case the global $pdo failed but logic works now?)
                 $conn = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME, DB_USER, DB_PASS);
                 $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                 $conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
                 $conn->exec("SET NAMES utf8");
             } catch (PDOException $e) {
-                // Connection failed. Check if it's because the database doesn't exist
+                // 3. Connection failed. Check if it's because the database doesn't exist (Code 1049)
                 try {
                     // Connect to MySQL server without selecting a database
                     $tmp_pdo = new PDO("mysql:host=" . DB_HOST, DB_USER, DB_PASS);
                     $tmp_pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
                     $dbname = DB_NAME;
+                    // Attempt to create
                     $tmp_pdo->exec("CREATE DATABASE IF NOT EXISTS `$dbname` CHARACTER SET utf8 COLLATE utf8_general_ci");
 
                     // Retry connection
@@ -54,14 +55,14 @@ function getDBConnection() {
                     $conn->exec("SET NAMES utf8");
 
                 } catch (PDOException $ex) {
-                    // Fallback
+                    // Creation failed or generic failure
                 }
             }
         }
     }
 
+    // 4. Fallback to SQLite if MySQL is unavailable
     if (!$conn) {
-        // Fallback: SQLite
         $db_file = __DIR__ . '/database.sqlite';
         try {
             $conn = new PDO("sqlite:" . $db_file);
@@ -78,5 +79,24 @@ function getDBConnection() {
     }
 
     return $conn;
+}
+
+function check_db_status() {
+    global $pdo;
+    if (isset($pdo) && $pdo instanceof PDO) {
+        return ['status' => 'connected', 'type' => 'mysql', 'message' => 'Connected to ' . DB_NAME];
+    }
+
+    if (defined('DB_HOST')) {
+        // Check if server is reachable but DB missing
+        try {
+            $test = new PDO("mysql:host=" . DB_HOST, DB_USER, DB_PASS);
+            return ['status' => 'server_only', 'type' => 'mysql', 'message' => 'MySQL Server reachable, Database missing'];
+        } catch (PDOException $e) {
+            return ['status' => 'failed', 'type' => 'none', 'message' => 'Cannot connect to MySQL Server'];
+        }
+    }
+
+    return ['status' => 'sqlite', 'type' => 'sqlite', 'message' => 'Using local SQLite database'];
 }
 ?>
