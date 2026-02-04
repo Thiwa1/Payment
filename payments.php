@@ -104,16 +104,22 @@ include 'header.php';
     <!-- Select Active Schedule -->
     <div style="border: 1px solid #ccc; padding: 15px; flex: 1; background: #e9ecef;">
         <h3>2. Select Schedule to Mark Payments</h3>
-        <form method="GET">
-            <select name="schedule_id" onchange="this.form.submit()" style="width: 100%; padding: 8px;">
-                <option value="">-- Select Schedule --</option>
-                <?php foreach ($schedules as $sch): ?>
-                    <option value="<?= $sch['id'] ?>" <?= ($active_schedule_id == $sch['id']) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($sch['name']) ?> (<?= $sch['date'] ?>)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </form>
+        <?php if (count($schedules) > 0): ?>
+            <form method="GET">
+                <select name="schedule_id" onchange="this.form.submit()" style="width: 100%; padding: 8px;">
+                    <option value="">-- Select Schedule --</option>
+                    <?php foreach ($schedules as $sch): ?>
+                        <option value="<?= $sch['id'] ?>" <?= ($active_schedule_id == $sch['id']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($sch['name']) ?> (<?= $sch['date'] ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+        <?php else: ?>
+            <p style="color: #856404; background-color: #fff3cd; padding: 10px; border: 1px solid #ffeeba;">
+                No schedules found. Please create one on the left first.
+            </p>
+        <?php endif; ?>
     </div>
 </div>
 

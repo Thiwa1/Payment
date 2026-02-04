@@ -105,23 +105,29 @@ include 'header.php';
     <!-- Upload to Schedule -->
     <div style="border: 1px solid #ccc; padding: 15px; flex: 1; min-width: 300px;">
         <h3>2. Upload Paysheet</h3>
-        <form method="POST" enctype="multipart/form-data">
-            <input type="hidden" name="upload_paysheet" value="1">
-            <div class="form-group">
-                <label>Select Schedule</label>
-                <select name="schedule_id" required style="width: 100%; padding: 8px;">
-                    <option value="">-- Select Schedule --</option>
-                    <?php foreach ($schedules as $sch): ?>
-                        <option value="<?= $sch['id'] ?>"><?= htmlspecialchars($sch['name']) ?> (<?= $sch['date'] ?>)</option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>CSV File</label>
-                <input type="file" name="csv_file" accept=".csv" required>
-            </div>
-            <button type="submit">Upload CSV</button>
-        </form>
+        <?php if (count($schedules) > 0): ?>
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="upload_paysheet" value="1">
+                <div class="form-group">
+                    <label>Select Schedule</label>
+                    <select name="schedule_id" required style="width: 100%; padding: 8px;">
+                        <option value="">-- Select Schedule --</option>
+                        <?php foreach ($schedules as $sch): ?>
+                            <option value="<?= $sch['id'] ?>"><?= htmlspecialchars($sch['name']) ?> (<?= $sch['date'] ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>CSV File</label>
+                    <input type="file" name="csv_file" accept=".csv" required>
+                </div>
+                <button type="submit">Upload CSV</button>
+            </form>
+        <?php else: ?>
+            <p style="color: #856404; background-color: #fff3cd; padding: 10px; border: 1px solid #ffeeba;">
+                No schedules found. Please create a schedule in step 1 first.
+            </p>
+        <?php endif; ?>
     </div>
 
 </div>
