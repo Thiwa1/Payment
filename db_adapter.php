@@ -93,7 +93,7 @@ function check_db_status() {
             $test = new PDO("mysql:host=" . DB_HOST, DB_USER, DB_PASS);
             return ['status' => 'server_only', 'type' => 'mysql', 'message' => 'MySQL Server reachable, Database missing'];
         } catch (PDOException $e) {
-            return ['status' => 'failed', 'type' => 'none', 'message' => 'Cannot connect to MySQL Server'];
+            return ['status' => 'failed', 'type' => 'none', 'message' => 'Cannot connect to MySQL Server: ' . $e->getMessage()];
         }
     }
 
