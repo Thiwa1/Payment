@@ -38,26 +38,7 @@ function ensure_tables_exist($pdo) {
     }
     $pdo->exec($sql_employees);
 
-    // 2. Payments Table
-    $sql_payments = "CREATE TABLE IF NOT EXISTS payments (
-        id $auto_inc,
-        employee_id INTEGER NOT NULL,
-        amount REAL NOT NULL,
-        payment_date TEXT NOT NULL,
-        FOREIGN KEY (employee_id) REFERENCES employees(id)
-    )";
-    if ($driver === 'mysql') {
-        $sql_payments = "CREATE TABLE IF NOT EXISTS payments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            employee_id INT NOT NULL,
-            amount DECIMAL(10,2) NOT NULL,
-            payment_date DATE NOT NULL,
-            FOREIGN KEY (employee_id) REFERENCES employees(id)
-        )";
-    }
-    $pdo->exec($sql_payments);
-
-    // 4. Schedules Table (NEW)
+    // 4. Schedules Table (Moved up as dependency)
     $sql_schedules = "CREATE TABLE IF NOT EXISTS schedules (
         id $auto_inc,
         name TEXT NOT NULL UNIQUE,
@@ -74,13 +55,40 @@ function ensure_tables_exist($pdo) {
     }
     $pdo->exec($sql_schedules);
 
-    // 3. Paysheets Table (Updated with schedule_id)
-    // Note: If table exists, we might need to alter it.
-    // Since I can't easily alter in a portable way without checking existence of column,
-    // I will try to add the column or create new.
-    // For simplicity in this environment:
-    // If table exists, I'll try to add column.
+    // 2. Payments Table (Updated with schedule_id)
+    $sql_payments = "CREATE TABLE IF NOT EXISTS payments (
+        id $auto_inc,
+        schedule_id INTEGER,
+        employee_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        payment_date TEXT NOT NULL,
+        FOREIGN KEY (employee_id) REFERENCES employees(id),
+        FOREIGN KEY (schedule_id) REFERENCES schedules(id)
+    )";
+    if ($driver === 'mysql') {
+        $sql_payments = "CREATE TABLE IF NOT EXISTS payments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            schedule_id INT,
+            employee_id INT NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            payment_date DATE NOT NULL,
+            FOREIGN KEY (employee_id) REFERENCES employees(id),
+            FOREIGN KEY (schedule_id) REFERENCES schedules(id)
+        )";
+    }
+    $pdo->exec($sql_payments);
 
+    // Migration: Add schedule_id to payments if missing
+    try {
+        if ($driver === 'mysql') {
+            $pdo->exec("ALTER TABLE payments ADD COLUMN schedule_id INT AFTER id");
+            $pdo->exec("ALTER TABLE payments ADD FOREIGN KEY (schedule_id) REFERENCES schedules(id)");
+        } else {
+            $pdo->exec("ALTER TABLE payments ADD COLUMN schedule_id INTEGER REFERENCES schedules(id)");
+        }
+    } catch (PDOException $e) { }
+
+    // 3. Paysheets Table
     $sql_paysheets = "CREATE TABLE IF NOT EXISTS paysheets (
         id $auto_inc,
         schedule_id INTEGER,
@@ -138,9 +146,6 @@ function ensure_tables_exist($pdo) {
     }
     $pdo->exec($sql_paysheets);
 
-    // Attempt to add column if missing (Migration logic)
-    // Simple check: Select one row, check if column exists?
-    // Or just try ALTER TABLE and ignore error.
     try {
         if ($driver === 'mysql') {
             $pdo->exec("ALTER TABLE paysheets ADD COLUMN schedule_id INT AFTER id");
@@ -148,8 +153,6 @@ function ensure_tables_exist($pdo) {
         } else {
             $pdo->exec("ALTER TABLE paysheets ADD COLUMN schedule_id INTEGER REFERENCES schedules(id)");
         }
-    } catch (PDOException $e) {
-        // Ignore "duplicate column" error
-    }
+    } catch (PDOException $e) { }
 }
 ?>
