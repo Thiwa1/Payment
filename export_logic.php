@@ -185,22 +185,29 @@ function generate_paysheet_excel($month_year = null) {
     // Uses get_paysheet_data which handles numeric ID or date string
     $rows = get_paysheet_data($month_year);
 
+    // Exact headers from user requirement
+    $exact_headers = [
+        'No.', 'Emp/ Code', 'Name', 'Designation', 'WORKING PLACE / PROJECT', 'PROJECT HEAD', 'STATUS ACTIVE / NOT',
+        'BASIC SALARY', 'Travelling Allowance', 'Vehicle Allowance', 'Arreas', 'GROSS PAY SALARY',
+        'NOPAY DAYS', 'NOPAY FOR BUDGETORY', 'NOPAY FOR OTHER', 'EPF 8%',
+        'Salary /Advance', 'Staff Loan', 'Communication/ Deduction', 'NET PAY', 'HOLD'
+    ];
+
     if (!check_dependencies()) {
-        $headers = ['No.', 'Emp Code', 'Name', 'Designation', 'WORKING PLACE / PROJECT', 'PROJECT HEAD', 'STATUS', 'BASIC SALARY', 'Travelling Allowance', 'Vehicle Allowance', 'Arreas', 'GROSS PAY', 'SALARY NOPAY DAYS', 'NOPAY FOR BUDGETORY', 'NOPAY FOR OTHER', 'EPF 8%', 'Salary Advance', 'Staff Loan', 'Communication Deduction', 'NET PAY', 'HOLD'];
         $csv_rows = [];
         $count = 1;
         foreach ($rows as $row) {
             $csv_rows[] = [$count++, $row['emp_code'], $row['name'], $row['designation'], $row['working_place'], $row['project_head'], $row['status'], $row['basic_salary'], $row['travelling_allowance'], $row['vehicle_allowance'], $row['arrears'], $row['gross_pay'], $row['salary_nopay_days'], $row['nopay_budgetory'], $row['nopay_other'], $row['epf_8'], $row['salary_advance'], $row['staff_loan'], $row['communication_deduction'], $row['net_pay'], $row['hold']];
         }
-        export_to_csv($headers, $csv_rows, "paysheet_$month_year.csv");
+        export_to_csv($exact_headers, $csv_rows, "paysheet_$month_year.csv");
         return;
     }
 
     $spreadsheet = new Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
-    $headers = ['No.', 'Emp Code', 'Name', 'Designation', 'WORKING PLACE / PROJECT', 'PROJECT HEAD', 'STATUS', 'BASIC SALARY', 'Travelling Allowance', 'Vehicle Allowance', 'Arreas', 'GROSS PAY', 'SALARY NOPAY DAYS', 'NOPAY FOR BUDGETORY', 'NOPAY FOR OTHER', 'EPF 8%', 'Salary Advance', 'Staff Loan', 'Communication Deduction', 'NET PAY', 'HOLD'];
+
     $col = 'A';
-    foreach ($headers as $header) {
+    foreach ($exact_headers as $header) {
         $sheet->setCellValue($col . '1', $header);
         $sheet->getStyle($col . '1')->getFont()->setBold(true);
         $col++;
