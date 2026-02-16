@@ -53,6 +53,12 @@ function get_employee_id_by_identifier($value) {
     $stmt->execute([':val' => $val_with_zero]);
     if ($id = $stmt->fetchColumn()) return $id;
 
+    // 4. Try match on account_number with TWO leading zeros
+    $val_with_two_zeros = '00' . $value;
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE account_number = :val");
+    $stmt->execute([':val' => $val_with_two_zeros]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
     return false;
 }
 
