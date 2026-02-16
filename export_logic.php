@@ -58,6 +58,7 @@ function export_to_csv($headers, $rows, $filename) {
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     $output = fopen('php://output', 'w');
+    fputs($output, "\xEF\xBB\xBF"); // Add BOM for Excel UTF-8 compatibility
     fputcsv($output, $headers);
     foreach ($rows as $row) { fputcsv($output, $row); }
     fclose($output);
