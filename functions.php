@@ -122,6 +122,23 @@ function update_schedule($id, $name, $date) {
     } catch (PDOException $e) { return false; }
 }
 
+function delete_schedule($id) {
+    $pdo = getDBConnection();
+    try {
+        // Delete dependent payments first
+        $stmt = $pdo->prepare("DELETE FROM payments WHERE schedule_id = :id");
+        $stmt->execute([':id' => $id]);
+
+        // Delete dependent paysheets first
+        $stmt = $pdo->prepare("DELETE FROM paysheets WHERE schedule_id = :id");
+        $stmt->execute([':id' => $id]);
+
+        // Delete schedule
+        $stmt = $pdo->prepare("DELETE FROM schedules WHERE id = :id");
+        return $stmt->execute([':id' => $id]);
+    } catch (PDOException $e) { return false; }
+}
+
 function get_schedules() {
     $pdo = getDBConnection();
     try {
