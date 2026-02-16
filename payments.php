@@ -66,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_payment'])) {
 }
 
 // Helper for scientific notation cleaning
-if (!function_exists('clean_csv_emp_no')) {
-    function clean_csv_emp_no($val) {
+if (!function_exists('clean_csv_value')) {
+    function clean_csv_value($val) {
         $val = trim($val);
         // If numeric and contains 'E' or 'e' (Scientific Notation)
         if (is_numeric($val) && stripos($val, 'E') !== false) {
@@ -95,28 +95,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_bulk_payments'
                 $rowNum++;
                 if (empty($data) || (count($data) < 2)) continue;
 
-                // Expecting Col 0: Emp No, Col 1: Amount
-                $emp_no_raw = $data[0];
+                // Expecting Col 0: Identifier (Emp No or Account No), Col 1: Amount
+                $id_raw = $data[0];
                 $amount = trim($data[1]);
 
                 // Skip header row roughly checking if amount is not numeric and emp_no is "Emp No" or similar
-                if ($rowNum == 1 && !is_numeric($amount) && (stripos($emp_no_raw, 'emp') !== false || stripos($amount, 'amount') !== false)) {
+                if ($rowNum == 1 && !is_numeric($amount) && (stripos($id_raw, 'emp') !== false || stripos($id_raw, 'account') !== false || stripos($amount, 'amount') !== false)) {
                     continue;
                 }
 
-                $emp_no = clean_csv_emp_no($emp_no_raw);
+                $identifier = clean_csv_value($id_raw);
 
-                // Validate Emp No
-                $emp_id = get_employee_by_number($emp_no);
+                // Validate Emp No or Account No
+                $emp_id = get_employee_id_by_identifier($identifier);
 
                 if (!$emp_id) {
-                    $unavailable_employees[] = $emp_no . " (Row $rowNum)";
+                    $unavailable_employees[] = $identifier . " (Row $rowNum)";
                     continue;
                 }
 
                 // Validate Amount
                 if ($amount === '' || $amount === null) {
-                    $blank_amounts[] = $emp_no . " (Row $rowNum)";
+                    $blank_amounts[] = $identifier . " (Row $rowNum)";
                     continue;
                 }
 
@@ -223,7 +223,7 @@ include 'header.php';
 
     <?php if (!empty($bulk_report['unavailable'])): ?>
         <div style="color: red; margin-top: 10px;">
-            <strong>Unavailable Employees (Skipped):</strong><br>
+            <strong>Unavailable Employees/Accounts (Skipped):</strong><br>
             <?= implode(', ', array_map('htmlspecialchars', $bulk_report['unavailable'])) ?>
         </div>
     <?php endif; ?>

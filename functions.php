@@ -33,6 +33,29 @@ function get_employee_by_number($emp_no) {
     $stmt->execute([':en' => $emp_no]);
     return $stmt->fetchColumn();
 }
+
+function get_employee_id_by_identifier($value) {
+    $pdo = getDBConnection();
+
+    // 1. Try exact match on employee_number
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :val");
+    $stmt->execute([':val' => $value]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    // 2. Try exact match on account_number
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE account_number = :val");
+    $stmt->execute([':val' => $value]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    // 3. Try match on account_number with leading zero (missing in CSV)
+    $val_with_zero = '0' . $value;
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE account_number = :val");
+    $stmt->execute([':val' => $val_with_zero]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    return false;
+}
+
 function bulk_upload_employees($file_path) {
     if (!file_exists($file_path)) return ['count' => 0, 'errors' => ["File not found"]];
     $handle = fopen($file_path, "r");
