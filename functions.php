@@ -27,6 +27,12 @@ function add_employee($data) {
 function get_employees() { $pdo = getDBConnection(); try { $stmt = $pdo->query("SELECT * FROM employees ORDER BY id DESC"); return $stmt->fetchAll(); } catch (PDOException $e) { return []; } }
 function get_employee_by_search($term) { $pdo = getDBConnection(); $term = "%$term%"; $stmt = $pdo->prepare("SELECT * FROM employees WHERE calling_name LIKE :term OR employee_number LIKE :term OR nic_no LIKE :term"); $stmt->execute([':term' => $term]); return $stmt->fetchAll(); }
 function get_employee_by_id($id) { $pdo = getDBConnection(); $stmt = $pdo->prepare("SELECT * FROM employees WHERE id = :id"); $stmt->execute([':id' => $id]); return $stmt->fetch(); }
+function get_employee_by_number($emp_no) {
+    $pdo = getDBConnection();
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :en");
+    $stmt->execute([':en' => $emp_no]);
+    return $stmt->fetchColumn();
+}
 function bulk_upload_employees($file_path) {
     if (!file_exists($file_path)) return ['count' => 0, 'errors' => ["File not found"]];
     $handle = fopen($file_path, "r");

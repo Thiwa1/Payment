@@ -4,6 +4,7 @@ require_once 'export_logic.php';
 
 $message = '';
 $results = [];
+$bulk_report = null;
 
 // Handle Create Schedule
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_schedule'])) {
@@ -48,6 +49,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_payment'])) {
     }
 }
 
+// Handle Bulk Upload Payments
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_bulk_payments'])) {
+    if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] == 0 && !empty($_POST['active_schedule_id'])) {
+        $schedule_id = $_POST['active_schedule_id'];
+        $file_path = $_FILES['csv_file']['tmp_name'];
+        $handle = fopen($file_path, "r");
+
+        if ($handle !== FALSE) {
+            $unavailable_employees = [];
+            $blank_amounts = [];
+            $total_valid_amount = 0;
+            $valid_count = 0;
+            $rowNum = 0;
+
+            while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                $rowNum++;
+                if (empty($data) || (count($data) < 2)) continue;
+
+                // Expecting Col 0: Emp No, Col 1: Amount
+                $emp_no = trim($data[0]);
+                $amount = trim($data[1]);
+
+                // Skip header row roughly checking if amount is not numeric and emp_no is "Emp No" or similar
+                if ($rowNum == 1 && !is_numeric($amount) && (stripos($emp_no, 'emp') !== false || stripos($amount, 'amount') !== false)) {
+                    continue;
+                }
+
+                // Validate Emp No
+                $emp_id = get_employee_by_number($emp_no);
+
+                if (!$emp_id) {
+                    $unavailable_employees[] = $emp_no;
+                    continue;
+                }
+
+                // Validate Amount
+                if ($amount === '' || $amount === null) {
+                    $blank_amounts[] = $emp_no;
+                    continue;
+                }
+
+                // Save valid payment
+                $clean_amount = clean_number($amount);
+                if (save_payment($emp_id, $clean_amount, date('Y-m-d'), $schedule_id)) {
+                    $total_valid_amount += $clean_amount;
+                    $valid_count++;
+                }
+            }
+            fclose($handle);
+
+            $bulk_report = [
+                'unavailable' => $unavailable_employees,
+                'blank' => $blank_amounts,
+                'total_amount' => $total_valid_amount,
+                'valid_count' => $valid_count
+            ];
+            $message = "Bulk upload processed.";
+        } else {
+            $message = "Cannot open CSV file.";
+        }
+    } else {
+        $message = "Invalid file or no schedule selected.";
+    }
+}
+
 // Handle Export by Schedule ID
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['download_schedule_report'])) {
     $schedule_id = $_POST['schedule_id'];
@@ -89,6 +155,28 @@ include 'header.php';
 
 <?php if ($message): ?><div class="alert"><?= htmlspecialchars($message) ?></div><?php endif; ?>
 
+<?php if ($bulk_report): ?>
+<div style="background-color: #f8f9fa; border: 1px solid #ddd; padding: 20px; margin-bottom: 20px;">
+    <h3>Bulk Upload Report</h3>
+    <p><strong>Total Valid Payments Added:</strong> <?= $bulk_report['valid_count'] ?></p>
+    <p><strong>Total Value:</strong> <?= number_format($bulk_report['total_amount'], 2) ?></p>
+
+    <?php if (!empty($bulk_report['unavailable'])): ?>
+        <div style="color: red; margin-top: 10px;">
+            <strong>Unavailable Employees (Invalid Emp No):</strong><br>
+            <?= implode(', ', array_map('htmlspecialchars', $bulk_report['unavailable'])) ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!empty($bulk_report['blank'])): ?>
+        <div style="color: orange; margin-top: 10px;">
+            <strong>Blank Amounts (Emp No):</strong><br>
+            <?= implode(', ', array_map('htmlspecialchars', $bulk_report['blank'])) ?>
+        </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
     <!-- Create Schedule -->
     <div style="border: 1px solid #ccc; padding: 15px; flex: 1;">
@@ -126,6 +214,19 @@ include 'header.php';
 <?php if ($active_schedule_id): ?>
     <hr>
     <h3>Marking Payments for Schedule ID: <?= $active_schedule_id ?></h3>
+
+    <!-- Bulk Upload Section -->
+    <div style="border: 1px dashed #007bff; padding: 15px; margin-bottom: 20px; background-color: #f0f8ff;">
+        <h4>Bulk Payment Upload (CSV)</h4>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="upload_bulk_payments" value="1">
+            <input type="hidden" name="active_schedule_id" value="<?= $active_schedule_id ?>">
+            <input type="file" name="csv_file" accept=".csv" required>
+            <p style="font-size: 0.9em; color: #666;">Format: <code>Emp No, Amount</code> (Header optional)</p>
+            <button type="submit">Upload & Process</button>
+        </form>
+    </div>
+
     <form method="GET" action="">
         <input type="hidden" name="schedule_id" value="<?= $active_schedule_id ?>">
         <div class="form-group">
