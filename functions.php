@@ -27,6 +27,41 @@ function add_employee($data) {
 function get_employees() { $pdo = getDBConnection(); try { $stmt = $pdo->query("SELECT * FROM employees ORDER BY id DESC"); return $stmt->fetchAll(); } catch (PDOException $e) { return []; } }
 function get_employee_by_search($term) { $pdo = getDBConnection(); $term = "%$term%"; $stmt = $pdo->prepare("SELECT * FROM employees WHERE calling_name LIKE :term OR employee_number LIKE :term OR nic_no LIKE :term"); $stmt->execute([':term' => $term]); return $stmt->fetchAll(); }
 function get_employee_by_id($id) { $pdo = getDBConnection(); $stmt = $pdo->prepare("SELECT * FROM employees WHERE id = :id"); $stmt->execute([':id' => $id]); return $stmt->fetch(); }
+function get_employee_by_number($emp_no) {
+    $pdo = getDBConnection();
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :en");
+    $stmt->execute([':en' => $emp_no]);
+    return $stmt->fetchColumn();
+}
+
+function get_employee_id_by_identifier($value) {
+    $pdo = getDBConnection();
+
+    // 1. Try exact match on employee_number
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE employee_number = :val");
+    $stmt->execute([':val' => $value]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    // 2. Try exact match on account_number
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE account_number = :val");
+    $stmt->execute([':val' => $value]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    // 3. Try match on account_number with leading zero (missing in CSV)
+    $val_with_zero = '0' . $value;
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE account_number = :val");
+    $stmt->execute([':val' => $val_with_zero]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    // 4. Try match on account_number with TWO leading zeros
+    $val_with_two_zeros = '00' . $value;
+    $stmt = $pdo->prepare("SELECT id FROM employees WHERE account_number = :val");
+    $stmt->execute([':val' => $val_with_two_zeros]);
+    if ($id = $stmt->fetchColumn()) return $id;
+
+    return false;
+}
+
 function bulk_upload_employees($file_path) {
     if (!file_exists($file_path)) return ['count' => 0, 'errors' => ["File not found"]];
     $handle = fopen($file_path, "r");
@@ -113,6 +148,23 @@ function update_schedule($id, $name, $date) {
     $stmt = $pdo->prepare($sql);
     try {
         return $stmt->execute([':name' => $name, ':date' => $date, ':id' => $id]);
+    } catch (PDOException $e) { return false; }
+}
+
+function delete_schedule($id) {
+    $pdo = getDBConnection();
+    try {
+        // Delete dependent payments first
+        $stmt = $pdo->prepare("DELETE FROM payments WHERE schedule_id = :id");
+        $stmt->execute([':id' => $id]);
+
+        // Delete dependent paysheets first
+        $stmt = $pdo->prepare("DELETE FROM paysheets WHERE schedule_id = :id");
+        $stmt->execute([':id' => $id]);
+
+        // Delete schedule
+        $stmt = $pdo->prepare("DELETE FROM schedules WHERE id = :id");
+        return $stmt->execute([':id' => $id]);
     } catch (PDOException $e) { return false; }
 }
 
